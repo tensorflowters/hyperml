@@ -1,3 +1,6 @@
+// src/main.rs
+
+// Disabling the standard library is required to boot on bare metal.
 #![no_std]
 #![no_main]
 

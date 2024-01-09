@@ -1,3 +1,5 @@
+
+## Install kvm on host to boot the project
 install_qemu:
 	@egrep -c '(vmx|svm)' /proc/cpuinfo
 	@grep -E --color '(vmx|svm)' /proc/cpuinfo
