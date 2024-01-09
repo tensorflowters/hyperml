@@ -1,4 +1,16 @@
 use volatile::Volatile;
+use core::fmt;
+use lazy_static::lazy_static;
+use spin::Mutex;
+
+// With lazy_static, we can define our static WRITER without problems:
+lazy_static! {
+    pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
+        column_position: 0,
+        color_code: ColorCode::new(Color::Yellow, Color::Black),
+        buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
+    });
+}
 
 // Normally the compiler would issue a warning for each unused variant. By using the #[allow(dead_code)] attribute, we disable these warnings for the Color enum.
 #[allow(dead_code)]
@@ -72,15 +84,25 @@ struct Buffer {
 
 // The writer will always write to the last line and shift lines up when a line is full (or on \n).
 // Note that we need an explicit lifetime here to tell the compiler how long the reference is valid.
+// pub struct Writer {
+//     // The column_position field keeps track of the current position in the last row.
+//     column_position: usize,
+//     // The current foreground and background colors are specified by color_code and a reference to the VGA buffer is stored in buffer.
+//     color_code: ColorCode,
+//     // The 'static lifetime specifies that the reference is valid for the whole program run time (which is true for the VGA text buffer).
+//     buffer: &'static mut Buffer,
+// }
+// NB: To understand what’s happening here, we need to know that statics are initialized at compile time, in contrast to normal variables that are initialized at run time.
+// The component of the Rust compiler that evaluates such initialization expressions is called the “const evaluator”.
+// Its functionality is still limited, but there is ongoing work to expand it, for example in the “Allow panicking in constants” RFC.
+// The issue with ColorCode::new would be solvable by using const functions,
+// but the fundamental problem here is that Rust’s const evaluator is not able to convert raw pointers to references at compile time. Maybe it will work someday, but until then, we have to find another solution.
+
 pub struct Writer {
-    // The column_position field keeps track of the current position in the last row.
     column_position: usize,
-    // The current foreground and background colors are specified by color_code and a reference to the VGA buffer is stored in buffer.
     color_code: ColorCode,
-    // The 'static lifetime specifies that the reference is valid for the whole program run time (which is true for the VGA text buffer).
     buffer: &'static mut Buffer,
 }
-
 
 // Now we can use the Writer to modify the buffer’s characters.
 // First we create a method to write a single ASCII byte:
@@ -132,18 +154,84 @@ impl Writer {
         }
     }
 
-    fn new_line(&mut self) {/* TODO */}
+    // ight now, we just ignore newlines and characters that don’t fit into the line anymore
+    // Instead, we want to move every character one line up (the top line gets deleted) and start at the beginning of the last line again.
+    // To do this, we add an implementation for the new_line method of Writer:
+    fn new_line(&mut self) {
+        // We iterate over all the screen characters and move each character one row up.
+        for row in 1..BUFFER_HEIGHT {
+            for col in 0..BUFFER_WIDTH {
+                let character = self.buffer.chars[row][col].read();
+                // Note that the upper bound of the range notation (..) is exclusive.
+                // We also omit the 0th row (the first range starts at 1) because it’s the row that is shifted off screen.
+                self.buffer.chars[row - 1][col].write(character);
+            }
+        }
+        self.clear_row(BUFFER_HEIGHT - 1);
+        self.column_position = 0;
+    }
+
+    // This method clears a row by overwriting all of its characters with a space character.
+    fn clear_row(&mut self, row: usize) {
+        let blank = ScreenChar {
+            ascii_character: b' ',
+            color_code: self.color_code,
+        };
+        for col in 0..BUFFER_WIDTH {
+            self.buffer.chars[row][col].write(blank);
+        }
+    }
 }
 
 // To write some characters to the screen, you can create a temporary function:
-pub fn print_something() {
-    let mut writer = Writer {
-        column_position: 0,
-        color_code: ColorCode::new(Color::Yellow, Color::Black),
-        buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
-    };
+// pub fn print_something() {
+//     use core::fmt::Write;
+//     let mut writer = Writer {
+//         column_position: 0,
+//         color_code: ColorCode::new(Color::Yellow, Color::Black),
+//         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
+//     };
 
-    writer.write_byte(b'H');
-    writer.write_string("ello ");
-    writer.write_string("Wörld!");
+//     writer.write_byte(b'H');
+//     writer.write_string("ello! ");
+//     write!(writer, "The numbers are {} and {}", 42, 1.0/3.0).unwrap();
+// }
+// After adding Mutex, we can delete the print_something function and print directly from our _start function:
+
+// That way, we can easily print different types, like integers or floats.
+// To support them, we need to implement the core::fmt::Write trait.
+// The only required method of this trait is write_str, which looks quite similar to our write_string method, just with a fmt::Result return type:
+impl fmt::Write for Writer {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.write_string(s);
+        Ok(())
+    }
 }
+
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => ($crate::vga_buffer::_print(format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! println {
+    () => ($crate::print!("\n"));
+    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
+}
+
+#[doc(hidden)]
+pub fn _print(args: fmt::Arguments) {
+    use core::fmt::Write;
+    WRITER.lock().write_fmt(args).unwrap();
+}
+
+// One thing that we changed from the original println definition is that we prefixed the invocations of the print! macro with $crate too.
+
+// This ensures that we don’t need to import the print! macro too if we only want to use println.
+
+//Like in the standard library, we add the #[macro_export] attribute to both macros to make them available everywhere in our crate. Note that this places the macros in the root namespace of the crate, so importing them via use crate::vga_buffer::println does not work. Instead, we have to do use crate::println.
+
+// The _print function locks our static WRITER and calls the write_fmt method on it. This method is from the Write trait, which we need to import. The additional unwrap() at the end panics if printing isn’t successful. But since we always return Ok in write_str, that should not happen.
+
+// Since the macros need to be able to call _print from outside of the module, the function needs to be public. However, since we consider this a private implementation detail, we add the doc(hidden) attribute to hide it from the generated documentation.

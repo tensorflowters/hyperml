@@ -8,13 +8,16 @@ use core::panic::PanicInfo;
 /// This function is called on entry.
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    vga_buffer::print_something();
+    // Note that we don’t have to import the macro in the main function, because it already lives in the root namespace.
+    // As expected, we now see a “Hello World!” on the screen:
+    println!("Hello World{}", "!");
 
     loop {}
 }
 
 /// This function is called on panic.
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    println!("{}", info);
     loop {}
 }
