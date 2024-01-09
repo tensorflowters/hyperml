@@ -84,4 +84,3 @@ The same principle applies to .rodata (read-only data like constants), .data (in
 Your specific hypervisor project might have unique requirements regarding memory layout, especially if you're dealing with special hardware or need to place code and data in specific memory regions. In such cases, you'll tailor your linker script to meet these requirements.
 
 Understanding and correctly utilizing a linker script is key to successful systems programming in environments where you have complete control over how your program is laid out and executed in memory.
-

@@ -47,4 +47,4 @@ GDB: Use GDB or another debugger for low-level debugging of your kernel.
 
 After you have a basic kernel that boots and provides output, you can proceed to more advanced features like memory management, CPU virtualization, and the integration of your specific hypervisor functionalities.
 
-https://github.com/phil-opp/blog_os/tree/post-02
+Refer to the [post-02 branch](https://github.com/phil-opp/blog_os/tree/post-02)
