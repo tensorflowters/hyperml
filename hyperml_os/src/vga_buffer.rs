@@ -235,3 +235,25 @@ pub fn _print(args: fmt::Arguments) {
 // The _print function locks our static WRITER and calls the write_fmt method on it. This method is from the Write trait, which we need to import. The additional unwrap() at the end panics if printing isn’t successful. But since we always return Ok in write_str, that should not happen.
 
 // Since the macros need to be able to call _print from outside of the module, the function needs to be public. However, since we consider this a private implementation detail, we add the doc(hidden) attribute to hide it from the generated documentation.
+
+#[test_case]
+fn test_println_simple() {
+    println!("test_println_simple output");
+}
+
+#[test_case]
+fn test_println_many() {
+    for _ in 0..200 {
+        println!("test_println_many output");
+    }
+}
+
+#[test_case]
+fn test_println_output() {
+    let s = "Some test string that fits on a single line";
+    println!("{}", s);
+    for (i, c) in s.chars().enumerate() {
+        let screen_char = WRITER.lock().buffer.chars[BUFFER_HEIGHT - 2][i].read();
+        assert_eq!(char::from(screen_char.ascii_character), c);
+    }
+}

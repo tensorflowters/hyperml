@@ -17,9 +17,6 @@ start_kvm:
 install_gdb:
 	@sudo apt install -y gdb
 
-run_tabby:
-	@docker run -it --gpus all -p 8080:8080 -v $HOME/.tabby:/data tabbyml/tabby serve --model TabbyML/StarCoder-1B --device cuda
-
 install_rustup:
 	@curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
@@ -31,3 +28,6 @@ start_minimal_kernel:
 	@cargo install bootimage
 	@cargo bootimage
 	@cargo run
+
+test_kernel:
+	@cargo test
